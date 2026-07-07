@@ -3,7 +3,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 import numpy as np
 import sphn
@@ -144,12 +144,13 @@ def parse_data_sources(
 
 def build_dataset(
     pretrain_data: str,
-    instruct_tokenizer: InterleavedTokenizer,
+    instruct_tokenizer: Any,
     seed: int | None,
     rank: int,
     world_size: int,
     is_eval: bool,
     shuffle_pretrain: bool = False,
+    mode: str = "moshi",
 ) -> Iterator[Sample]:
     sources, probabilities = parse_data_sources(pretrain_data=pretrain_data)
 
@@ -164,6 +165,7 @@ def build_dataset(
             is_finite=is_eval,
             seed=seed,
             shuffle_at_epoch=shuffle,
+            mode=mode,
         )
         for source in sources
     ]
@@ -189,16 +191,35 @@ def get_rng(seed: int, rank: int) -> np.random.RandomState:
 
 def get_dataset_iterator(
     source: DataDir | DataFile,
-    instruct_tokenizer: InterleavedTokenizer,
+    instruct_tokenizer: Any,
     rank: int,
     world_size: int,
     is_finite: bool,
     seed: int | None,
     shuffle_at_epoch: bool,
+    mode: str,
 ) -> Iterator[Sample]:
     epoch = 1
     while True:
         for jsonl_file in source.jsonl_files:
+            if mode == "hibiki_s2st":
+                rows = load_file(jsonl_file, rank=rank, world_size=world_size)
+                if shuffle_at_epoch:
+                    rng = get_rng(0 if seed is None else seed, rank)
+                    rng.shuffle(rows)
+                    if seed is not None:
+                        seed += 1
+                for line in rows:
+                    row = json.loads(line)
+                    start_sec = 0.0
+                    while start_sec < row["duration"]:
+                        yield instruct_tokenizer(row, start_sec, jsonl_file.parent)
+                        start_sec += instruct_tokenizer.duration_sec
+                continue
+
+            if mode != "moshi":
+                raise ValueError(f"Unsupported data mode: {mode}")
+
             dataset = sphn.dataset_jsonl(
                 str(jsonl_file),
                 duration_sec=instruct_tokenizer.duration_sec,

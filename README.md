@@ -139,6 +139,31 @@ python annotate.py {your jsonl file}
 This script can also be run in a distributed manner with SLURM using e.g.
 `--shards 64 --partition 'your-partition'`.
 
+### Hibiki paired S2ST data
+
+Set `data.mode: moshi` to keep the single-audio Moshi JSONL format described
+above. Set `data.mode: hibiki_s2st` for paired Hibiki source-target speech
+translation manifests:
+
+```json
+{"source_audio":"fr/source_000001.wav","target_audio":"en/target_000001.wav","duration":4.0,"target_alignment":"alignments/target_000001.json","speaker_similarity":"good"}
+```
+
+The required fields are `source_audio`, `target_audio`, `duration`, and
+`target_alignment`. Relative paths are resolved from the manifest directory.
+The target alignment JSON should contain timestamped target words:
+
+```json
+{"alignments":[["hello",[0.10,0.35],"SPEAKER_MAIN"],["world",[0.40,0.70],"SPEAKER_MAIN"]]}
+```
+
+Hibiki mode packs streams as `[target_text, target_audio_codebooks,
+source_audio_codebooks]`. This first fine-tuning path keeps the existing
+training objective: target text loss plus generated target audio loss, with
+source audio used as teacher-forced conditioning context. It does not implement
+source-stream loss, contextual alignment, TTS generation, silence insertion, or
+ASR-BLEU/speaker-similarity/latency benchmark metrics.
+
 ## 🏋️ Start training
 
 Once your dataset is ready, start fine-tuning using the following steps.

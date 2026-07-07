@@ -16,6 +16,7 @@ from torch.optim import AdamW, lr_scheduler
 from finetune.args import TrainArgs
 from finetune.checkpointing import Checkpointer
 from finetune.data.data_loader import build_data_loader
+from finetune.data.hibiki_s2st import HibikiS2STTokenizer
 from finetune.data.interleaver import InterleavedTokenizer, Interleaver
 from finetune.distributed import (
     BACKEND,
@@ -160,9 +161,21 @@ def _train(args: TrainArgs, exit_stack: ExitStack):
         model.zero_token_id,
         keep_main_only=True,
     )
-    interleaved_tokenizer = InterleavedTokenizer(
-        mimi, interleaver, duration_sec=args.duration_sec
-    )
+    if args.data.mode == "moshi":
+        interleaved_tokenizer = InterleavedTokenizer(
+            mimi, interleaver, duration_sec=args.duration_sec
+        )
+    elif args.data.mode == "hibiki_s2st":
+        interleaved_tokenizer = HibikiS2STTokenizer(
+            mimi=mimi,
+            interleaver=interleaver,
+            duration_sec=args.duration_sec,
+            n_q=model.n_q,
+            dep_q=model.dep_q,
+            expected_num_codebooks=model.num_codebooks,
+        )
+    else:
+        raise ValueError(f"Unsupported data mode: {args.data.mode}")
 
     # 5. Load data loaders
     data_loader = build_data_loader(
